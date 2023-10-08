@@ -25,7 +25,7 @@ const RenderMaterial = shaderMaterial(
   `
   varying vec2 vRef;
     void main() {
-      gl_FragColor.rgba = vec4(1., 1., 1., 1.0);
+      gl_FragColor.rgba = vec4(1., 1., 1., 1.);
     }
   `
 )
