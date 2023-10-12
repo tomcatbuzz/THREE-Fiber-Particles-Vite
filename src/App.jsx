@@ -6,6 +6,8 @@ import { Particles } from './Particles'
 export default function App() {
   return (
     <Canvas>
+      <ambientLight intensity={0.1} />
+      <directionalLight />
       <Particles />
       <OrbitControls />
     </Canvas>
