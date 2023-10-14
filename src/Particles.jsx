@@ -1,10 +1,10 @@
 import './RenderMaterial';
 import './SimulationMaterial';
 import { getDataTexture, getSphereTexture, getVelocityTexture } from './GetDataTexture';
-import { createPortal, useFrame } from '@react-three/fiber';
+import { createPortal, useFrame, useLoader } from '@react-three/fiber';
 import { useRef, useMemo, useEffect } from 'react';
 import * as THREE from 'three';
-import { MeshPhysicalMaterial } from 'three';
+import { MeshPhysicalMaterial, MeshMatcapMaterial } from 'three';
 // import { useFBO } from '@react-three/drei';
 import { useThree } from '@react-three/fiber';
 
@@ -16,6 +16,7 @@ import { patchShaders } from 'gl-noise/build/glNoise.m';
 import simFragmentPosition from './shaders/simFragmentPosition';
 import simFragmentVelocity from './shaders/simFragmentVelocity';
 
+// Rendering Shader
 const shader = {
   vertex: /* glsl */ `
     uniform float uTime;
@@ -23,16 +24,27 @@ const shader = {
     uniform sampler2D uVelocity;
     attribute vec2 ref;
 
-    vec3 displace(vec3 point) {
+    vec3 rotate3D(vec3 v, vec3 vel) {
+      vec3 newpos = v;
+      vec3 up = vec3(0, 1, 0);
+      vec3 axis = normalize(cross(up, vel));
+      float angle = acos(dot(up, normalize(vel)));
+      newpos = newpos * cos(angle) + cross(axis, newpos) * sin(angle) + axis * dot(axis, newpos) * (1. - cos(angle));
+      return newpos;
+    }
+
+    vec3 displace(vec3 point, vec3 vel) {
       vec3 pos = texture2D(uPosition, ref).rgb;
-      vec3 instancePosition = (instanceMatrix * vec4(point, 1.)).xyz;
+      vec3 copypoint = rotate3D(point, vel);
+      vec3 instancePosition = (instanceMatrix * vec4(copypoint, 1.)).xyz;
       return instancePosition + pos;
     }  
 
     void main() {
-      vec3 p = displace(position);
+      vec3 vel = texture2D(uVelocity, ref).rgb;
+      vec3 p = displace(position, vel);
       csm_PositionRaw = projectionMatrix * modelViewMatrix * instanceMatrix * vec4(p, 1.);
-      // csm_Normal = p;
+      csm_Normal = rotate3D(normal, vel);
     }
     `,
   fragment: /* glsl */ `
@@ -43,7 +55,8 @@ const shader = {
 }
 
 export function Particles() {
-  const SIZE = 14;
+  const SIZE = 256;
+  const [map] = useLoader(THREE.TextureLoader,['/matcap3.png'])
   // might need to go into refs or state for r3f
   const simMat = useRef();
   const renderMat = useRef()
@@ -148,7 +161,7 @@ export function Particles() {
 
   useFrame(({ gl }) => {
     gpuCompute.compute();
-    renderMat.current.uniforms.uPosition.value = gpuCompute.getCurrentRenderTarget(positionVariable).texture;
+    // renderMat.current.uniforms.uPosition.value = gpuCompute.getCurrentRenderTarget(positionVariable).texture;
 
     iref.current.material.uniforms.uPosition.value = gpuCompute.getCurrentRenderTarget(positionVariable).texture;
 
@@ -180,9 +193,9 @@ export function Particles() {
     )} */}
       <mesh ref={followMouse}>
         <sphereGeometry args={[0.1, 32, 32]} />
-        <meshBasicMaterial color="red" />
+        <meshMatcapMaterial color="red" />
       </mesh>
-      <points>
+      {/* <points>
       <bufferGeometry>
         <bufferAttribute
             attach="attributes-position"
@@ -202,13 +215,14 @@ export function Particles() {
         blending={THREE.AdditiveBlending}
         ref={renderMat} 
       />
-      </points>
+      </points> */}
       <instancedMesh ref={iref} args={[null, null, SIZE*SIZE]}>
-        <boxGeometry args={[0.1, 0.1, 0.1]} />
+        <boxGeometry args={[0.01, 0.03, 0.01]} />
         {/* <meshNormalMaterial /> */}
         <CustomShaderMaterial
-          baseMaterial={MeshPhysicalMaterial}
+          baseMaterial={MeshMatcapMaterial}
           size={0.01}
+          matcap={map}
           vertexShader={patchShaders(shader.vertex)}
           fragmentShader={patchShaders(shader.fragment)}
           uniforms={uniforms}
